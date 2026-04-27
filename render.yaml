@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: ligma-workspace
+    env: node
+    buildCommand: npm install && npm run build
+    startCommand: npm run start
+    envVars:
+      - key: NODE_VERSION
+        value: 18.17.0
+      - key: PORT
+        value: 3001
