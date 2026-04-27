@@ -132,3 +132,19 @@
     @apply font-sans;
     }
 }
+
+@layer utilities {
+  .canvas-surface {
+    background-color: var(--background);
+    background-image:
+      radial-gradient(circle at 1px 1px, var(--border) 1px, transparent 0),
+      radial-gradient(circle at 0 0, var(--muted) 1px, transparent 0);
+    background-size: 48px 48px, 240px 240px;
+    background-position: -1px -1px, -2px -2px;
+    touch-action: none;
+  }
+
+  .canvas-node {
+    box-shadow: 0 14px 40px hsl(var(--foreground) / 0.08);
+  }
+}
