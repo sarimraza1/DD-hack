@@ -54,18 +54,19 @@ This PRD serves as the single source of truth for architecture, implementation, 
 | Technology | Role | Justification |
 |------------|------|---------------|
 | **React 19** | UI framework | Concurrent features, optimal for high-frequency state updates (cursors, canvas deltas). Largest ecosystem for rapid hackathon UI construction. |
-| **Vite** | Build tool | Instant HMR, fast production builds, Bun-compatible. |
-| **TypeScript** | End-to-end types | Single language across stack; Elysia + Eden enables sharing TS interfaces between backend and frontend automatically. |
+| **TanStack Start** | Full-stack React framework & build tool | File-based routing with type-safe `createFileRoute`, built-in SSR and streaming support, Vite-powered HMR under the hood, and seamless Bun compatibility. Enables isomorphic data loading via `createServerFn` — canvas metadata and initial task board state can be server-fetched before hydration, eliminating loading spinners on first paint. Replaces a bare Vite setup with a structured, production-grade framework without the Next.js complexity penalty. |
+| **TypeScript** | End-to-end types | Single language across stack; Elysia + Eden enables sharing TS interfaces between backend and frontend automatically. TanStack Start's `createServerFn` preserves these types at the framework boundary. |
 | **Tailwind CSS + shadcn/ui** | Styling & components | Rapidly build consistent, accessible UI primitives (dialogs, panels, dropdowns) without design overhead. |
 | **Zustand** | Client state management | Minimal boilerplate for UI state (tool selection, sidebar visibility, auth). Complements (not replaces) Yjs for canvas state. |
 | **Yjs** | CRDT & real-time sync | Industry-standard CRDT implementation (YATA algorithm). Provides `Y.Map` for nodes, `Y.Text` for collaborative text, `Y.Array` for strokes, and Awareness API for cursor presence. Using Yjs is architecturally sound; the README will explain its CRDT mechanics to satisfy judging requirements. |
 
 
-### 3.3 Why Not Node/Express/Next.js?
+### 3.3 Why Not Node/Express/Next.js/bare Vite?
 
 - **Node + Express**: Slower WebSocket throughput, callback-based middleware is harder to reason about under time pressure.
 - **Next.js**: App Router serverless functions are not designed for persistent WebSocket connections. Workarounds (Vercel AI SDK, PartyKit) are paid or complex.
-- **Elysia on Bun** is the sweet spot: modern, type-safe, WebSocket-native, and demonstrates non-obvious architectural decision-making (Category 5 points).
+- **Bare Vite (React SPA)**: No file-based routing, no SSR, no server functions — every data-fetch is a client-side waterfall. Initial canvas load requires an extra round trip to the Elysia API before rendering anything meaningful.
+- **TanStack Start on Bun** is the sweet spot: Vite-powered HMR speed, file-based routing with full TypeScript inference, `createServerFn` for zero-waterfall initial loads, and no serverless-function constraints blocking persistent WebSocket management. Demonstrates non-obvious architectural decision-making (Category 5 points).
 
 ---
 
@@ -74,10 +75,11 @@ This PRD serves as the single source of truth for architecture, implementation, 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                        CLIENT (Browser)                          │
-│  ┌──────────────┐  ┌──────────────┐                             │
-│  │  React + Zustand  │  │  Yjs CRDT Doc   │                             │
-│  │  (UI State)       │  │  (Canvas State) │                             │
-│  └──────────────┘  └──────────────┘                             │
+│  ┌──────────────────┐  ┌──────────────┐                          │
+│  │  TanStack Start  │  │  Yjs CRDT Doc│                          │
+│  │  (File Routes +  │  │  (Canvas     │                          │
+│  │   Zustand State) │  │   State)     │                          │
+│  └──────────────────┘  └──────────────┘                          │
 │                         │                                        │
 │  ┌──────────────────────┴──────────────────────────────────┐   │
 │  │              Custom Infinite Canvas Engine                 │   │
@@ -490,7 +492,9 @@ Assuming a **48-hour hackathon** (common format), this roadmap prioritizes scori
 - [ ] Provision Neon Postgres project (free tier) + copy `DATABASE_URL` to `.env`.
 - [ ] Provision Upstash Redis database (free tier) + copy `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` to `.env`.
 - [ ] Set up Drizzle ORM schema and run `drizzle-kit push` against Neon.
-- [ ] Scaffold React + Vite + Tailwind + shadcn/ui frontend.
+- [ ] Scaffold TanStack Start app (`bun create @tanstack/start apps/web`) with Tailwind + shadcn/ui.
+- [ ] Configure file-based routes: `routes/index.tsx` (landing), `routes/canvas/$id.tsx` (canvas room), `routes/auth/login.tsx`.
+- [ ] Set up `createServerFn` for canvas metadata pre-fetch (eliminates client-side waterfall on room join).
 - [ ] Implement JWT auth (register/login) on both sides.
 - [ ] **Deliverable:** Health check endpoint, auth flow, empty canvas page.
 
@@ -543,12 +547,12 @@ Assuming a **48-hour hackathon** (common format), this roadmap prioritizes scori
 ```
 Render Services:
 └── ligma-web (Web Service — single deploy unit)
-    ├── Build Command: cd apps/server && bun install && bun run build
+    ├── Build Command: cd apps/server && bun install && bun run build && cd ../web && bun install && bun run build
     ├── Start Command: cd apps/server && bun run start
     ├── Environment: DATABASE_URL (Neon), UPSTASH_REDIS_REST_URL,
     │               UPSTASH_REDIS_REST_TOKEN, GROQ_API_KEY,
     │               JWT_SECRET, BUN_ENV=production
-    └── Serves: Elysia API + WebSocket + static Vite build from apps/web/dist
+    └── Serves: Elysia API + WebSocket + static TanStack Start build from apps/web/.output/public
 
 External Services (free tier, zero Render cost):
 ├── Neon Postgres — Event store, tasks, users, permissions, canvases
@@ -586,7 +590,7 @@ The README is a judging artifact. It must contain:
 3. **Event Sourcing Explanation** — "No mutation overwrites. Deleting a node emits a `NodeDeleted` event. The current state is always a left-fold over `events`."
 4. **WebSocket Protocol** — Document delta vs. full-state, replay mechanism, presence heartbeat.
 5. **RBAC Enforcement** — Diagram showing client guard + server gate.
-6. **Local Setup** — `bun install`, copy `.env.example` (Neon `DATABASE_URL`, Upstash credentials, `GROQ_API_KEY`), `bun dev`. No Docker required.
+6. **Local Setup** — `bun install`, copy `.env.example` (Neon `DATABASE_URL`, Upstash credentials, `GROQ_API_KEY`), run `bun dev` in `apps/server` and `bun dev` in `apps/web` (TanStack Start dev server with Vite HMR). No Docker required.
 7. **Render Deploy** — One-click instructions or script.
 
 ---
@@ -596,10 +600,11 @@ The README is a judging artifact. It must contain:
 During Stage 1 architecture presentation, articulate these **non-obvious** decisions:
 
 1. **"Why Elysia on Bun instead of Node/Express"** — Bun's native WebSocket eliminates `ws` library overhead; Elysia's Eden Treaty gives us compile-time API contracts between frontend and backend.
-2. **"Why server-side AI via Groq instead of Transformers.js in-browser"** — Eliminates a 15MB WASM bundle from the client bundle, removes the model cold-start latency on first canvas load, and keeps the client purely concerned with rendering. The server owns the full classification lifecycle and can batch calls under rate-limit budget. Groq's free tier is zero-cost for this usage pattern.
-3. **"Why DOM nodes instead of Canvas API for sticky notes"** — Canvas would require us to rebuild text editing, accessibility, and selection from scratch. DOM gives us `contentEditable` and ARIA for free, while SVG/Canvas handle what they do best (edges and freehand).
-4. **"Why we chose Time-Travel as our bonus"** — Because event sourcing makes it trivial to implement *correctly*, while presence heatmaps would require additional derived data structures that don't reinforce our core architecture.
-5. **"Why Yjs + Event Sourcing together"** — Yjs provides operational CRDT convergence; event sourcing provides auditability and replay. They are complementary, not alternatives.
+2. **"Why TanStack Start instead of bare Vite or Next.js"** — TanStack Start gives us file-based routing with full TypeScript inference and `createServerFn` for server-side data loading without the Next.js serverless-function model that breaks persistent WebSocket connections. Canvas room metadata (permissions, initial task list) is server-fetched before hydration — no loading spinners on first paint. The framework stays out of the WebSocket path entirely; Elysia owns that.
+3. **"Why server-side AI via Groq instead of Transformers.js in-browser"** — Eliminates a 15MB WASM bundle from the client bundle, removes the model cold-start latency on first canvas load, and keeps the client purely concerned with rendering. The server owns the full classification lifecycle and can batch calls under rate-limit budget. Groq's free tier is zero-cost for this usage pattern.
+4. **"Why DOM nodes instead of Canvas API for sticky notes"** — Canvas would require us to rebuild text editing, accessibility, and selection from scratch. DOM gives us `contentEditable` and ARIA for free, while SVG/Canvas handle what they do best (edges and freehand).
+5. **"Why we chose Time-Travel as our bonus"** — Because event sourcing makes it trivial to implement *correctly*, while presence heatmaps would require additional derived data structures that don't reinforce our core architecture.
+6. **"Why Yjs + Event Sourcing together"** — Yjs provides operational CRDT convergence; event sourcing provides auditability and replay. They are complementary, not alternatives.
 
 ---
 
